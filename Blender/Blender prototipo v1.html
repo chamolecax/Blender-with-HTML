@@ -1,0 +1,1845 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blender 3D Web Edition</title>
+    <!-- Tailwind CSS para el diseño impecable de la interfaz oscura de Blender -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons para los iconos de la interfaz -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Three.js para el motor de renderizado 3D -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        /* Estilos personalizados para emular a Blender perfectamente */
+        body {
+            background-color: #1e1e1e;
+            color: #dbdbdb;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            overflow: hidden;
+            user-select: none;
+        }
+        /* Colores oficiales de Blender */
+        .bg-blender-dark { background-color: #181818; }
+        .bg-blender-medium { background-color: #282828; }
+        .bg-blender-light { background-color: #3d3d3d; }
+        .bg-blender-header { background-color: #2e2e2e; }
+        .border-blender { border-color: #212121; }
+        .text-blender-orange { color: #f29111; }
+        .bg-blender-orange { background-color: #f29111; }
+        .bg-blender-orange-hover:hover { background-color: #e0810d; }
+        .text-blender-blue { color: #3a80ff; }
+        
+        /* Canvas y Viewport */
+        #viewport-container {
+            position: relative;
+            cursor: default;
+        }
+        /* Grid y ejes */
+        .axis-indicator {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 80px;
+            height: 80px;
+            pointer-events: none;
+        }
+        /* Custom scrollbar para la estética */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #232323;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #4a4a4a;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #5f5f5f;
+        }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col">
+
+    <!-- BARRA DE MENÚ SUPERIOR (TOP BAR) -->
+    <header class="bg-blender-header h-9 border-b border-blender px-3 flex items-center justify-between text-xs z-10">
+        <div class="flex items-center space-x-4">
+            <!-- Logo de Blender ficticio pero fiel -->
+            <div class="flex items-center space-x-1.5 cursor-pointer">
+                <svg class="w-4 h-4 text-blender-orange fill-current" viewBox="0 0 24 24">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+                </svg>
+                <span class="font-bold text-gray-200">Blender</span>
+            </div>
+            <!-- Enlaces del menú superior -->
+            <nav class="flex space-x-3 text-gray-300">
+                <button class="hover:bg-blender-light px-2 py-0.5 rounded transition" onclick="toggleMenu('file')">Archivo</button>
+                <button class="hover:bg-blender-light px-2 py-0.5 rounded transition" onclick="toggleMenu('edit')">Editar</button>
+                <button class="hover:bg-blender-light px-2 py-0.5 rounded transition" onclick="toggleMenu('add')">Agregar</button>
+                <button class="hover:bg-blender-light px-2 py-0.5 rounded transition" id="btn-dictionary" onclick="toggleDictionary()">Diccionario de Términos</button>
+            </nav>
+        </div>
+
+        <!-- Indicador de Modo Actual y Sombreado -->
+        <div class="flex items-center space-x-4">
+            <div class="flex items-center bg-blender-dark rounded px-2 py-1 space-x-1 border border-blender">
+                <span class="text-gray-400">Modo:</span>
+                <button id="mode-badge" onclick="toggleInteractionMode()" class="text-blender-orange font-semibold uppercase hover:underline">Modo Objeto</button>
+            </div>
+            <!-- Atajos rápidos visuales -->
+            <div class="hidden md:flex items-center text-[11px] text-gray-400 space-x-3">
+                <span>[Tab] Cambiar Modo</span>
+                <span>[G] Mover</span>
+                <span>[R] Rotar</span>
+                <span>[S] Escalar</span>
+                <span>[E] Extruir</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- WORKSPACE PRINCIPAL -->
+    <div class="flex-1 flex overflow-hidden">
+        
+        <!-- BARRA DE HERRAMIENTAS IZQUIERDA (LEFT TOOLBAR) -->
+        <div class="w-12 bg-blender-dark border-r border-blender flex flex-col items-center py-4 space-y-3 z-10 text-gray-400">
+            <!-- Cursor / Selección -->
+            <button id="tool-select" onclick="setActiveTool('select')" class="p-2 rounded hover:bg-blender-medium hover:text-white transition bg-blender-light text-blender-orange" title="Herramienta Selección (Click Izquierdo)">
+                <i data-lucide="mouse-pointer"></i>
+            </button>
+            <!-- Mover -->
+            <button id="tool-translate" onclick="setActiveTool('translate')" class="p-2 rounded hover:bg-blender-medium hover:text-white transition" title="Mover / Desplazar (Atajo: G)">
+                <i data-lucide="move"></i>
+            </button>
+            <!-- Rotar -->
+            <button id="tool-rotate" onclick="setActiveTool('rotate')" class="p-2 rounded hover:bg-blender-medium hover:text-white transition" title="Rotar / Girar (Atajo: R)">
+                <i data-lucide="rotate-cw"></i>
+            </button>
+            <!-- Escalar -->
+            <button id="tool-scale" onclick="setActiveTool('scale')" class="p-2 rounded hover:bg-blender-medium hover:text-white transition" title="Escalar / Cambiar tamaño (Atajo: S)">
+                <i data-lucide="maximize-2"></i>
+            </button>
+            <div class="w-8 border-t border-blender my-1"></div>
+            <!-- Herramientas exclusivas del modo edición -->
+            <div id="edit-tools" class="flex flex-col space-y-3 items-center opacity-40" title="Activa el Modo Edición [Tab] para usar estas herramientas">
+                <!-- Extruir -->
+                <button id="tool-extrude" onclick="triggerExtrusion()" class="p-2 rounded hover:bg-blender-medium hover:text-white transition disabled:opacity-50" disabled title="Extruir Cara (Atajo: E)">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 100-6 3 3 0 000 6z"/>
+                    </svg>
+                </button>
+                <!-- Subdividir malla -->
+                <button id="tool-subdivide" onclick="triggerSubdivision()" class="p-2 rounded hover:bg-blender-medium hover:text-white transition disabled:opacity-50" disabled title="Subdividir Superficie (Suavizar malla)">
+                    <i data-lucide="grid-3x3"></i>
+                </button>
+            </div>
+            
+            <div class="flex-1"></div>
+            <!-- Ayuda / Diccionario rápido -->
+            <button onclick="toggleDictionary()" class="p-2 rounded hover:bg-blender-medium text-blue-400 hover:text-blue-300 transition" title="Ver definiciones de términos en español">
+                <i data-lucide="book-open"></i>
+            </button>
+        </div>
+
+        <!-- VIEWPORT PRINCIPAL (3D VIEWPORT) -->
+        <main class="flex-1 flex flex-col relative" id="viewport-container">
+            <!-- Barra superior del Viewport -->
+            <div class="absolute top-2 left-2 right-2 flex justify-between items-center pointer-events-none z-10">
+                <!-- Selección de Tipo de Selección (Vértice, Borde, Cara) en Modo Edición -->
+                <div id="selection-type-container" class="flex items-center bg-blender-medium border border-blender rounded p-0.5 space-x-1 pointer-events-auto shadow-lg hidden">
+                    <button id="sel-vertex" onclick="setEditSelectMode('vertex')" class="px-2.5 py-1 text-xs rounded bg-blender-light text-white font-semibold flex items-center space-x-1">
+                        <span class="w-2 h-2 rounded-full bg-yellow-400 inline-block"></span>
+                        <span>Vértices</span>
+                    </button>
+                    <button id="sel-face" onclick="setEditSelectMode('face')" class="px-2.5 py-1 text-xs rounded text-gray-400 hover:bg-blender-light hover:text-white transition flex items-center space-x-1">
+                        <span class="w-2.5 h-2.5 bg-orange-500 inline-block"></span>
+                        <span>Caras</span>
+                    </button>
+                </div>
+
+                <!-- Modos de Sombreado (Shading) -->
+                <div class="flex items-center bg-blender-medium border border-blender rounded p-0.5 space-x-1 pointer-events-auto ml-auto shadow-lg">
+                    <button id="shading-wire" onclick="setShadingMode('wire')" class="p-1 rounded text-gray-400 hover:bg-blender-light" title="Modo Alambre (Estructura interna)">
+                        <i data-lucide="codepen" class="w-4 h-4"></i>
+                    </button>
+                    <button id="shading-solid" onclick="setShadingMode('solid')" class="p-1 rounded bg-blender-light text-white" title="Modo Sólido (Por defecto)">
+                        <i data-lucide="box" class="w-4 h-4"></i>
+                    </button>
+                    <button id="shading-material" onclick="setShadingMode('material')" class="p-1 rounded text-gray-400 hover:bg-blender-light" title="Modo Vista Previa de Materiales">
+                        <i data-lucide="palette" class="w-4 h-4"></i>
+                    </button>
+                    <button id="shading-render" onclick="setShadingMode('render')" class="p-1 rounded text-gray-400 hover:bg-blender-light" title="Modo Renderizado (Sombras y luces)">
+                        <i data-lucide="sun" class="w-4 h-4"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Panel de Notificaciones/Instrucciones Flotantes de Atajos -->
+            <div class="absolute bottom-4 left-4 bg-black/85 text-xs text-gray-300 p-3 rounded border border-blender z-10 max-w-sm pointer-events-auto space-y-1.5 shadow-xl">
+                <div class="font-bold text-blender-orange flex items-center justify-between">
+                    <span>Atajos Rápidos de Blender</span>
+                    <span class="text-[9px] bg-blender-light text-gray-400 px-1 rounded">Teclado</span>
+                </div>
+                <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]">
+                    <div><b class="text-white">Tab</b>: Modos</div>
+                    <div><b class="text-white">G</b>: Mover</div>
+                    <div><b class="text-white">R</b>: Rotar</div>
+                    <div><b class="text-white">S</b>: Escalar</div>
+                    <div><b class="text-white">E</b>: Extruir (Edición)</div>
+                    <div><b class="text-white">X / Supr</b>: Borrar</div>
+                    <div><b class="text-white">Shift + A</b>: Agregar</div>
+                    <div><b class="text-white">X, Y o Z</b>: Bloqueo de eje</div>
+                </div>
+                <!-- Notificación de estado dinámico -->
+                <div id="status-notification" class="text-green-400 mt-2 pt-1.5 border-t border-zinc-800 font-medium">
+                    Listo. Selecciona el Cubo para interactuar.
+                </div>
+            </div>
+
+            <!-- Controles Auxiliares Móviles/Táctiles en Pantalla -->
+            <div class="absolute bottom-4 right-4 bg-blender-medium/90 border border-blender rounded p-2.5 z-10 flex flex-col space-y-2 pointer-events-auto md:hidden shadow-lg">
+                <span class="text-[9px] font-bold text-gray-400 uppercase text-center">Acciones Táctiles</span>
+                <div class="grid grid-cols-2 gap-1.5 text-xs">
+                    <button onclick="triggerTransformMode('translate')" class="bg-blender-light px-2.5 py-1.5 rounded hover:bg-zinc-600">G: Mover</button>
+                    <button onclick="triggerTransformMode('rotate')" class="bg-blender-light px-2.5 py-1.5 rounded hover:bg-zinc-600">R: Rotar</button>
+                    <button onclick="triggerTransformMode('scale')" class="bg-blender-light px-2.5 py-1.5 rounded hover:bg-zinc-600">S: Escalar</button>
+                    <button onclick="triggerExtrusion()" class="bg-blender-light px-2.5 py-1.5 rounded hover:bg-zinc-600" id="btn-touch-extrude">E: Extruir</button>
+                </div>
+                <div class="grid grid-cols-3 gap-1 text-[10px]">
+                    <button onclick="lockToAxis('x')" class="bg-red-900/60 border border-red-700 p-1 rounded text-white font-bold">Eje X</button>
+                    <button onclick="lockToAxis('y')" class="bg-green-900/60 border border-green-700 p-1 rounded text-white font-bold">Eje Y</button>
+                    <button onclick="lockToAxis('z')" class="bg-blue-900/60 border border-blue-700 p-1 rounded text-white font-bold">Eje Z</button>
+                </div>
+            </div>
+
+            <!-- Canvas de Three.js -->
+            <div id="three-canvas" class="w-full flex-1"></div>
+        </main>
+
+        <!-- PANEL DERECHO: OUTLINER (SUPERIOR) & PROPERTIES (INFERIOR) -->
+        <aside class="w-72 bg-blender-dark border-l border-blender flex flex-col z-10">
+            <!-- OUTLINER: Jerarquía de la Escena -->
+            <div class="h-1/3 border-b border-blender flex flex-col">
+                <div class="bg-blender-medium px-3 py-1.5 border-b border-blender text-xs font-bold text-gray-300 flex items-center justify-between">
+                    <span>Scene Collection (Outliner)</span>
+                    <i data-lucide="layers" class="w-3.5 h-3.5 text-gray-400"></i>
+                </div>
+                <div class="flex-1 p-2 overflow-y-auto text-xs space-y-1 text-gray-400 font-mono">
+                    <div class="flex items-center space-x-1.5 text-gray-300">
+                        <i data-lucide="archive" class="w-3.5 h-3.5"></i>
+                        <span>Colección de la Escena</span>
+                    </div>
+                    <div class="pl-4 space-y-1">
+                        <!-- Cámara -->
+                        <div class="flex items-center justify-between hover:bg-blender-medium py-0.5 px-1 rounded cursor-pointer">
+                            <div class="flex items-center space-x-1.5">
+                                <i data-lucide="video" class="w-3.5 h-3.5 text-gray-500"></i>
+                                <span>Cámara_Escena</span>
+                            </div>
+                            <i data-lucide="eye" class="w-3 h-3 text-gray-400"></i>
+                        </div>
+                        <!-- Luz -->
+                        <div class="flex items-center justify-between hover:bg-blender-medium py-0.5 px-1 rounded cursor-pointer">
+                            <div class="flex items-center space-x-1.5">
+                                <i data-lucide="sun" class="w-3.5 h-3.5 text-yellow-500"></i>
+                                <span>Luz_Sol</span>
+                            </div>
+                            <i data-lucide="eye" class="w-3 h-3 text-gray-400"></i>
+                        </div>
+                        <!-- Objetos 3D creados -->
+                        <div id="outliner-objects" class="space-y-1">
+                            <!-- Inyectados dinámicamente -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PROPERTIES PANEL: Parámetros del objeto activo -->
+            <div class="flex-1 flex flex-col">
+                <!-- Pestañas de Propiedades -->
+                <div class="bg-blender-medium flex border-b border-blender text-gray-400">
+                    <button onclick="setPropertyTab('transform')" id="tab-transform" class="flex-1 py-1.5 text-center text-xs font-semibold bg-blender-dark text-blender-orange border-r border-blender" title="Transformación">
+                        <i data-lucide="sliders" class="w-4 h-4 mx-auto"></i>
+                    </button>
+                    <button onclick="setPropertyTab('material')" id="tab-material" class="flex-1 py-1.5 text-center text-xs font-semibold hover:bg-blender-medium hover:text-white border-r border-blender" title="Materiales">
+                        <i data-lucide="paint-bucket" class="w-4 h-4 mx-auto"></i>
+                    </button>
+                    <button onclick="setPropertyTab('modifier')" id="tab-modifier" class="flex-1 py-1.5 text-center text-xs font-semibold hover:bg-blender-medium hover:text-white" title="Modificadores">
+                        <i data-lucide="wrench" class="w-4 h-4 mx-auto"></i>
+                    </button>
+                </div>
+
+                <!-- Contenido de Propiedades -->
+                <div class="flex-1 p-3 overflow-y-auto text-xs text-gray-300 space-y-4">
+                    
+                    <!-- TAB 1: TRANSFORMACIÓN -->
+                    <div id="properties-transform" class="space-y-3">
+                        <div class="font-bold text-gray-200 border-b border-zinc-800 pb-1 flex items-center justify-between">
+                            <span>Transformación Física</span>
+                            <span class="text-[10px] text-gray-500 font-mono" id="active-object-type">Tipo: Malla</span>
+                        </div>
+                        <div>
+                            <label class="text-gray-400 block mb-1">Nombre del Objeto:</label>
+                            <input type="text" id="obj-name-input" onchange="updateObjectName(this.value)" class="w-full bg-blender-dark border border-blender rounded px-2 py-1 text-white focus:outline-none focus:border-blender-orange">
+                        </div>
+                        
+                        <!-- Posición (Location) -->
+                        <div class="space-y-1">
+                            <span class="text-gray-400 block">Posición (Location)</span>
+                            <div class="grid grid-cols-3 gap-1 text-[11px] font-mono">
+                                <div class="flex items-center bg-red-950/40 rounded border border-red-900/60 overflow-hidden">
+                                    <span class="bg-red-800 text-white px-1 py-0.5 text-[9px] font-bold">X</span>
+                                    <input type="number" step="0.1" id="transform-pos-x" onchange="updateActiveTransform('pos', 'x', this.value)" class="bg-transparent w-full px-1 text-white text-right focus:outline-none">
+                                </div>
+                                <div class="flex items-center bg-green-950/40 rounded border border-green-900/60 overflow-hidden">
+                                    <span class="bg-green-800 text-white px-1 py-0.5 text-[9px] font-bold">Y</span>
+                                    <input type="number" step="0.1" id="transform-pos-y" onchange="updateActiveTransform('pos', 'y', this.value)" class="bg-transparent w-full px-1 text-white text-right focus:outline-none">
+                                </div>
+                                <div class="flex items-center bg-blue-950/40 rounded border border-blue-900/60 overflow-hidden">
+                                    <span class="bg-blue-800 text-white px-1 py-0.5 text-[9px] font-bold">Z</span>
+                                    <input type="number" step="0.1" id="transform-pos-z" onchange="updateActiveTransform('pos', 'z', this.value)" class="bg-transparent w-full px-1 text-white text-right focus:outline-none">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Rotación (Rotation) -->
+                        <div class="space-y-1">
+                            <span class="text-gray-400 block">Rotación (Grados)</span>
+                            <div class="grid grid-cols-3 gap-1 text-[11px] font-mono">
+                                <div class="flex items-center bg-red-950/40 rounded border border-red-900/60 overflow-hidden">
+                                    <span class="bg-red-800 text-white px-1 py-0.5 text-[9px] font-bold">X</span>
+                                    <input type="number" id="transform-rot-x" onchange="updateActiveTransform('rot', 'x', this.value)" class="bg-transparent w-full px-1 text-white text-right focus:outline-none">
+                                </div>
+                                <div class="flex items-center bg-green-950/40 rounded border border-green-900/60 overflow-hidden">
+                                    <span class="bg-green-800 text-white px-1 py-0.5 text-[9px] font-bold">Y</span>
+                                    <input type="number" id="transform-rot-y" onchange="updateActiveTransform('rot', 'y', this.value)" class="bg-transparent w-full px-1 text-white text-right focus:outline-none">
+                                </div>
+                                <div class="flex items-center bg-blue-950/40 rounded border border-blue-900/60 overflow-hidden">
+                                    <span class="bg-blue-800 text-white px-1 py-0.5 text-[9px] font-bold">Z</span>
+                                    <input type="number" id="transform-rot-z" onchange="updateActiveTransform('rot', 'z', this.value)" class="bg-transparent w-full px-1 text-white text-right focus:outline-none">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Escala (Scale) -->
+                        <div class="space-y-1">
+                            <span class="text-gray-400 block">Escala (Scale)</span>
+                            <div class="grid grid-cols-3 gap-1 text-[11px] font-mono">
+                                <div class="flex items-center bg-red-950/40 rounded border border-red-900/60 overflow-hidden">
+                                    <span class="bg-red-800 text-white px-1 py-0.5 text-[9px] font-bold">X</span>
+                                    <input type="number" step="0.1" id="transform-sca-x" onchange="updateActiveTransform('sca', 'x', this.value)" class="bg-transparent w-full px-1 text-white text-right focus:outline-none">
+                                </div>
+                                <div class="flex items-center bg-green-950/40 rounded border border-green-900/60 overflow-hidden">
+                                    <span class="bg-green-800 text-white px-1 py-0.5 text-[9px] font-bold">Y</span>
+                                    <input type="number" step="0.1" id="transform-sca-y" onchange="updateActiveTransform('sca', 'y', this.value)" class="bg-transparent w-full px-1 text-white text-right focus:outline-none">
+                                </div>
+                                <div class="flex items-center bg-blue-950/40 rounded border border-blue-900/60 overflow-hidden">
+                                    <span class="bg-blue-800 text-white px-1 py-0.5 text-[9px] font-bold">Z</span>
+                                    <input type="number" step="0.1" id="transform-sca-z" onchange="updateActiveTransform('sca', 'z', this.value)" class="bg-transparent w-full px-1 text-white text-right focus:outline-none">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Información geométrica -->
+                        <div class="border-t border-zinc-800 pt-3 mt-2 text-gray-400 space-y-1">
+                            <span class="block font-semibold text-gray-300">Detalles Geométricos:</span>
+                            <div class="flex justify-between"><span>Vértices Totales:</span><span class="text-white" id="geom-vertices">-</span></div>
+                            <div class="flex justify-between"><span>Caras Totales:</span><span class="text-white" id="geom-faces">-</span></div>
+                        </div>
+
+                        <!-- Botón de Exportación OBJ -->
+                        <div class="pt-2">
+                            <button onclick="exportToOBJ()" class="w-full bg-blender-medium border border-blender text-white font-bold py-2 rounded flex items-center justify-center space-x-2 hover:bg-zinc-700 transition">
+                                <i data-lucide="download" class="w-4 h-4"></i>
+                                <span>Exportar a .OBJ</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- TAB 2: MATERIALES -->
+                    <div id="properties-material" class="space-y-3 hidden">
+                        <div class="font-bold text-gray-200 border-b border-zinc-800 pb-1">Sombreado y Texturas</div>
+                        
+                        <!-- Color Base -->
+                        <div>
+                            <label class="text-gray-400 block mb-1">Color Base (Albedo):</label>
+                            <div class="flex items-center space-x-2">
+                                <input type="color" id="mat-color-picker" oninput="updateActiveMaterial('color', this.value)" class="w-10 h-8 bg-transparent rounded border border-blender cursor-pointer">
+                                <input type="text" id="mat-color-hex" class="flex-1 bg-blender-dark border border-blender rounded px-2 py-1 text-white text-center font-mono">
+                            </div>
+                        </div>
+
+                        <!-- Rugosidad (Roughness) -->
+                        <div>
+                            <div class="flex justify-between text-gray-400 mb-1">
+                                <span>Rugosidad (Roughness)</span>
+                                <span id="val-roughness">0.5</span>
+                            </div>
+                            <input type="range" min="0" max="1" step="0.05" value="0.5" id="mat-roughness" oninput="updateActiveMaterial('roughness', this.value)" class="w-full accent-orange-500">
+                            <span class="text-[10px] text-gray-500 italic">Determina qué tan brillante es la superficie (0: espejo, 1: opaco).</span>
+                        </div>
+
+                        <!-- Metalicidad (Metalness) -->
+                        <div>
+                            <div class="flex justify-between text-gray-400 mb-1">
+                                <span>Metalicidad (Metalness)</span>
+                                <span id="val-metalness">0.1</span>
+                            </div>
+                            <input type="range" min="0" max="1" step="0.05" value="0.1" id="mat-metalness" oninput="updateActiveMaterial('metalness', this.value)" class="w-full accent-orange-500">
+                        </div>
+
+                        <!-- Textura Procedimental -->
+                        <div class="border-t border-zinc-800 pt-3 space-y-2">
+                            <label class="text-gray-400 block mb-1">Generador de Textura:</label>
+                            <select id="mat-texture" onchange="updateActiveMaterial('texture', this.value)" class="w-full bg-blender-dark border border-blender rounded px-2 py-1 text-white focus:outline-none">
+                                <option value="none">Sólido Plano</option>
+                                <option value="checkers">Tablero de Ajedrez</option>
+                                <option value="bricks">Ladrillos de Obra</option>
+                                <option value="clouds">Ruido de Nubes</option>
+                            </select>
+                            <span class="text-[10px] text-gray-500 block">La textura es visible solo en el modo <b class="text-gray-300">Material Preview</b> y <b class="text-gray-300">Rendered</b>.</span>
+                        </div>
+                    </div>
+
+                    <!-- TAB 3: MODIFICADORES -->
+                    <div id="properties-modifier" class="space-y-3 hidden">
+                        <div class="font-bold text-gray-200 border-b border-zinc-800 pb-1">Modificadores Geométricos</div>
+                        
+                        <!-- Caja de Modificadores -->
+                        <div class="bg-blender-dark p-3 rounded border border-blender space-y-3">
+                            <div class="flex items-center justify-between">
+                                <span class="font-bold text-blender-orange flex items-center space-x-1.5">
+                                    <i data-lucide="wrench" class="w-3.5 h-3.5"></i>
+                                    <span>Subdivision Surface</span>
+                                </span>
+                                <span class="text-[10px] bg-zinc-800 px-1 py-0.5 text-zinc-400 rounded">Catmull-Clark</span>
+                            </div>
+                            <p class="text-gray-400 text-[10.5px]">
+                                Añade más polígonos dividiendo las caras existentes y promediando los puntos para crear una forma completamente suavizada.
+                            </p>
+                            <button onclick="triggerSubdivision()" class="w-full bg-blender-orange hover:bg-blender-orange-hover text-white py-1.5 rounded font-bold transition flex items-center justify-center space-x-1">
+                                <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
+                                <span>Aplicar Subdivisión</span>
+                            </button>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </aside>
+
+        <!-- GLOSARIO / DICCIONARIO DE BLENDER (INTERACTIVO CAJÓN DERECHO) -->
+        <div id="dictionary-drawer" class="w-80 bg-blender-dark border-l border-blender flex flex-col z-20 hidden">
+            <div class="bg-blender-medium px-4 py-2 border-b border-blender flex items-center justify-between">
+                <span class="font-bold text-xs text-blender-orange flex items-center space-x-1.5">
+                    <i data-lucide="book-open" class="w-4 h-4"></i>
+                    <span>Diccionario de Blender en Español</span>
+                </span>
+                <button onclick="toggleDictionary()" class="text-gray-400 hover:text-white">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+            </div>
+            <div class="flex-1 p-4 overflow-y-auto text-xs space-y-4">
+                <p class="text-gray-400 italic mb-2">Diseñado especialmente para comprender cada palabra técnica sin quedarte con dudas de su significado:</p>
+                
+                <div class="space-y-1 border-b border-zinc-800 pb-2.5">
+                    <h4 class="font-bold text-white text-[12.5px] text-blender-blue">Extrusión (Extrude)</h4>
+                    <p class="text-gray-300">Acción de duplicar una superficie (cara) o punto y empujarla hacia adelante en el espacio, estirando los bordes para crear un nuevo volumen continuo.</p>
+                </div>
+
+                <div class="space-y-1 border-b border-zinc-800 pb-2.5">
+                    <h4 class="font-bold text-white text-[12.5px] text-blender-blue">Vértice (Vertex)</h4>
+                    <p class="text-gray-300">Cada uno de los puntos geométricos tridimensionales individuales que definen las esquinas de un objeto en el espacio 3D.</p>
+                </div>
+
+                <div class="space-y-1 border-b border-zinc-800 pb-2.5">
+                    <h4 class="font-bold text-white text-[12.5px] text-blender-blue">Cara (Face)</h4>
+                    <p class="text-gray-300">La superficie plana sólida que se forma cuando tres o más vértices se conectan por líneas formando un polígono.</p>
+                </div>
+
+                <div class="space-y-1 border-b border-zinc-800 pb-2.5">
+                    <h4 class="font-bold text-white text-[12.5px] text-blender-blue">Modo Edición (Edit Mode)</h4>
+                    <p class="text-gray-300">Estado de trabajo que desarma el objeto y te permite seleccionar y alterar cada vértice, línea y cara por separado para modelar formas personalizadas.</p>
+                </div>
+
+                <div class="space-y-1 border-b border-zinc-800 pb-2.5">
+                    <h4 class="font-bold text-white text-[12.5px] text-blender-blue">Ejes de Coordenadas (X, Y, Z)</h4>
+                    <p class="text-gray-300">Líneas de dirección universales que representan el espacio: <b>Eje X (Rojo)</b> representa izquierda/derecha, <b>Eje Y (Verde)</b> representa adelante/atrás y <b>Eje Z (Azul)</b> representa arriba/abajo.</p>
+                </div>
+
+                <div class="space-y-1 pb-2.5">
+                    <h4 class="font-bold text-white text-[12.5px] text-blender-blue">Subdivisión (Subdivide)</h4>
+                    <p class="text-gray-300">Proceso matemático que corta las caras del objeto a la mitad para multiplicar el detalle y redondear las superficies, logrando acabados suaves.</p>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- LÍNEA DE TIEMPO / TIMELINE DE ANIMACIÓN (INFERIOR) -->
+    <footer class="h-28 bg-blender-dark border-t border-blender flex flex-col z-10">
+        <div class="bg-blender-medium h-7 px-3 border-b border-blender flex items-center justify-between text-xs text-gray-400">
+            <div class="flex items-center space-x-3">
+                <span class="font-bold text-gray-200">Timeline / Animación</span>
+                <span class="text-blender-orange font-bold">Frame: <span id="current-frame-lbl">1</span>/250</span>
+            </div>
+            <!-- Controles de Reproducción -->
+            <div class="flex items-center space-x-1.5">
+                <button onclick="setAnimationFrame(1)" class="p-1 hover:bg-blender-light rounded text-white" title="Ir al Inicio">
+                    <i data-lucide="chevrons-left" class="w-3.5 h-3.5"></i>
+                </button>
+                <button onclick="stepAnimationFrame(-1)" class="p-1 hover:bg-blender-light rounded text-white" title="Frame Anterior">
+                    <i data-lucide="chevron-left" class="w-3.5 h-3.5"></i>
+                </button>
+                <button onclick="togglePlayback()" id="play-pause-btn" class="bg-blender-light text-blender-orange px-2.5 py-0.5 rounded text-[11px] font-bold flex items-center space-x-1 hover:bg-zinc-600 transition" title="Reproducir animación (Atajo: Barra Espaciadora)">
+                    <i data-lucide="play" class="w-3 h-3 inline"></i>
+                    <span>PLAY</span>
+                </button>
+                <button onclick="stepAnimationFrame(1)" class="p-1 hover:bg-blender-light rounded text-white" title="Frame Siguiente">
+                    <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i>
+                </button>
+                <button id="btn-insert-keyframe" onclick="insertKeyframe()" class="bg-amber-900/60 border border-amber-700 text-amber-200 px-2 py-0.5 rounded text-[10px] font-bold" title="Insertar Keyframe (Atajo: Tecla I)">
+                    Insertar Keyframe (I)
+                </button>
+            </div>
+            <div class="text-gray-500 font-mono text-[10px]">
+                Teclas rápidas de reproducción: [Barra Espaciadora]
+            </div>
+        </div>
+        <!-- Barra de reproducción física con ticks -->
+        <div class="flex-1 relative flex items-center overflow-x-auto overflow-y-hidden" id="timeline-scrubber" style="background-image: radial-gradient(#2c2c2c 1px, transparent 1px); background-size: 10px 10px;">
+            <!-- Marcadores físicos de Frame -->
+            <div id="timeline-ticks" class="flex items-end h-full w-[2500px] select-none text-[8.5px] text-gray-600 pb-1 pr-4">
+                <!-- Construido con JS -->
+            </div>
+            <!-- Indicador de cursor de reproducción rojo -->
+            <div id="timeline-cursor" class="absolute top-0 bottom-0 w-0.5 bg-red-500 z-10 shadow" style="left: 0px;">
+                <div class="w-3 h-3 bg-red-500 rounded-b absolute top-0 -left-[5px] flex items-center justify-center"></div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- MENÚS FLOTANTES (POPUPS) -->
+    <!-- Menú Agregar Objeto (Shift + A) -->
+    <div id="add-menu" class="hidden absolute bg-blender-medium border border-blender text-xs rounded-md shadow-2xl py-1 w-44 z-50 text-gray-300">
+        <div class="px-3 py-1 text-[10px] uppercase font-bold text-gray-500 tracking-wider">Mesh (Mallas)</div>
+        <button onclick="addMesh('cube')" class="w-full text-left px-3 py-1.5 hover:bg-blender-light flex items-center space-x-2">
+            <i data-lucide="box" class="w-3.5 h-3.5"></i>
+            <span>Cubo</span>
+        </button>
+        <button onclick="addMesh('plane')" class="w-full text-left px-3 py-1.5 hover:bg-blender-light flex items-center space-x-2">
+            <i data-lucide="square" class="w-3.5 h-3.5"></i>
+            <span>Plano</span>
+        </button>
+        <button onclick="addMesh('cylinder')" class="w-full text-left px-3 py-1.5 hover:bg-blender-light flex items-center space-x-2">
+            <i data-lucide="cylinder" class="w-3.5 h-3.5"></i>
+            <span>Cilindro</span>
+        </button>
+    </div>
+
+    <!-- SCRIPT DE CONTROL TRIDIMENSIONAL DE BLENDER -->
+    <script>
+        // --- VARIABLES GLOBALES DE CONFIGURACIÓN Y ESTADO ---
+        let scene, camera, renderer, gridHelper, polarGrid;
+        let ambientLight, dirLight, pointLight;
+        
+        let blenderObjects = []; // Objetos virtuales customizados de modelado
+        let activeObject = null; // El objeto seleccionado
+        
+        let interactionMode = 'object'; // 'object' o 'edit'
+        let editSelectMode = 'vertex'; // 'vertex' o 'face'
+        let activeTool = 'select'; // 'select', 'translate', 'rotate', 'scale'
+        let shadingMode = 'solid'; // 'wire', 'solid', 'material', 'render'
+        
+        // Transformaciones interactivas por teclado
+        let transformState = null; // 'translating', 'rotating', 'scaling'
+        let transformAxisLock = null; // 'x', 'y', 'z' o null
+        let transformInitialValues = {};
+        let transformMouseStart = { x: 0, y: 0 };
+        
+        // Elementos interactivos tridimensionales del Modo Edición
+        let editHelpersGroup = null;
+        let selectedVertices = new Set();
+        let selectedFaces = new Set();
+        let vertexHelperMeshes = [];
+        let faceHelperMeshes = [];
+        
+        // Animación y Línea de Tiempo
+        let currentFrame = 1;
+        let totalFrames = 250;
+        let isPlaying = false;
+        let playInterval = null;
+        let keyframes = {}; // keyframes: { objectId: { frameNumber: { pos, rot, sca } } }
+
+        // Elementos visuales del DOM
+        const viewportContainer = document.getElementById('viewport-container');
+        const threeContainer = document.getElementById('three-canvas');
+        const statusNotification = document.getElementById('status-notification');
+        const selectionTypeContainer = document.getElementById('selection-type-container');
+
+        // --- DEFINICIÓN DE LA CLASE CORE DE GEOMETRÍA: BlenderMesh ---
+        // Almacena topología modificable para permitir modelado, extrusión y subdivisión en tiempo real
+        class BlenderMesh {
+            constructor(type = 'cube') {
+                this.id = 'mesh_' + Math.random().toString(36).substr(2, 9);
+                this.name = type.charAt(0).toUpperCase() + type.slice(1);
+                this.type = type;
+                
+                // Mantenemos la estructura nativa tridimensional (Vértices y Caras)
+                this.vertices = []; // Array de THREE.Vector3
+                this.faces = []; // Array de arrays de enteros (índices de vértices)
+                
+                // Transformaciones físicas locales
+                this.position = new THREE.Vector3(0, 0, 0);
+                this.rotation = new THREE.Euler(0, 0, 0);
+                this.scale = new THREE.Vector3(1, 1, 1);
+                
+                // Propiedades del Material
+                this.materialProps = {
+                    color: '#808080',
+                    roughness: 0.5,
+                    metalness: 0.1,
+                    textureType: 'none'
+                };
+                
+                this.meshInstance = null; // El objeto tridimensional de ThreeJS
+                this.wireframeHelper = null;
+                
+                this.initGeometry();
+                this.rebuild();
+            }
+
+            initGeometry() {
+                if (this.type === 'cube') {
+                    // 8 Vértices del Cubo
+                    this.vertices = [
+                        new THREE.Vector3(-1, -1, -1), // 0
+                        new THREE.Vector3(1, -1, -1),  // 1
+                        new THREE.Vector3(1, 1, -1),   // 2
+                        new THREE.Vector3(-1, 1, -1),  // 3
+                        new THREE.Vector3(-1, -1, 1),  // 4
+                        new THREE.Vector3(1, -1, 1),   // 5
+                        new THREE.Vector3(1, 1, 1),    // 6
+                        new THREE.Vector3(-1, 1, 1)    // 7
+                    ];
+                    // 6 Caras principales (Quads)
+                    this.faces = [
+                        [3, 2, 1, 0], // Trasera
+                        [4, 5, 6, 7], // Delantera
+                        [0, 1, 5, 4], // Inferior
+                        [2, 3, 7, 6], // Superior
+                        [0, 4, 7, 3], // Izquierda
+                        [1, 2, 6, 5]  // Derecha
+                    ];
+                } else if (this.type === 'plane') {
+                    // Superficie plana simple
+                    this.vertices = [
+                        new THREE.Vector3(-2, 0, -2),
+                        new THREE.Vector3(2, 0, -2),
+                        new THREE.Vector3(2, 0, 2),
+                        new THREE.Vector3(-2, 0, 2)
+                    ];
+                    this.faces = [
+                        [0, 1, 2, 3]
+                    ];
+                } else if (this.type === 'cylinder') {
+                    // Cilindro geométrico de baja densidad (8 segmentos para facilitar modelado óptimo)
+                    const segments = 8;
+                    const radius = 1;
+                    const height = 2;
+                    
+                    // Vértices inferiores
+                    for(let i=0; i<segments; i++) {
+                        let rad = (i / segments) * Math.PI * 2;
+                        this.vertices.push(new THREE.Vector3(Math.cos(rad) * radius, -height/2, Math.sin(rad) * radius));
+                    }
+                    // Vértices superiores
+                    for(let i=0; i<segments; i++) {
+                        let rad = (i / segments) * Math.PI * 2;
+                        this.vertices.push(new THREE.Vector3(Math.cos(rad) * radius, height/2, Math.sin(rad) * radius));
+                    }
+                    
+                    // Caras de las paredes laterales
+                    for(let i=0; i<segments; i++) {
+                        let next = (i + 1) % segments;
+                        this.faces.push([i, next, next + segments, i + segments]);
+                    }
+                    
+                    // Tapas superior e inferior (Polígonos convexos simples)
+                    let bottomCap = [];
+                    let topCap = [];
+                    for(let i=0; i<segments; i++) {
+                        bottomCap.push(segments - 1 - i); // Sentido invertido para la normal correcta
+                        topCap.push(i + segments);
+                    }
+                    this.faces.push(bottomCap);
+                    this.faces.push(topCap);
+                }
+            }
+
+            // Reconstruye el búfer geométrico tridimensional tras modelar o extruir
+            rebuild() {
+                if (this.meshInstance) {
+                    scene.remove(this.meshInstance);
+                }
+                if (this.wireframeHelper) {
+                    scene.remove(this.wireframeHelper);
+                }
+
+                const geometry = new THREE.BufferGeometry();
+                const positionArray = [];
+                const normalArray = [];
+                const uvArray = [];
+
+                // Triangulamos las caras de forma dinámica (soporta triángulos y cuadriláteros)
+                this.faces.forEach(face => {
+                    if (face.length === 3) {
+                        const v0 = this.vertices[face[0]];
+                        const v1 = this.vertices[face[1]];
+                        const v2 = this.vertices[face[2]];
+                        positionArray.push(v0.x, v0.y, v0.z, v1.x, v1.y, v1.z, v2.x, v2.y, v2.z);
+                    } else if (face.length >= 4) {
+                        // Triangulación básica "Fan" para caras complejas de 4 vértices
+                        const v0 = this.vertices[face[0]];
+                        const v1 = this.vertices[face[1]];
+                        const v2 = this.vertices[face[2]];
+                        const v3 = this.vertices[face[3]];
+                        
+                        // Triángulo 1
+                        positionArray.push(v0.x, v0.y, v0.z, v1.x, v1.y, v1.z, v2.x, v2.y, v2.z);
+                        // Triángulo 2
+                        positionArray.push(v0.x, v0.y, v0.z, v2.x, v2.y, v2.z, v3.x, v3.y, v3.z);
+                    }
+                });
+
+                geometry.setAttribute('position', new THREE.Float32BufferAttribute(positionArray, 3));
+                geometry.computeVertexNormals();
+
+                // Construimos el Material de acuerdo a los modos de sombreado y texturas
+                let material;
+                
+                // Creación de textura procedimental en base a la configuración del usuario
+                let canvasTex = null;
+                if (this.materialProps.textureType !== 'none' && (shadingMode === 'material' || shadingMode === 'render')) {
+                    canvasTex = generateProceduralTexture(this.materialProps.textureType);
+                }
+
+                if (shadingMode === 'wire') {
+                    material = new THREE.MeshBasicMaterial({
+                        color: 0xdbdbdb,
+                        wireframe: true,
+                        side: THREE.DoubleSide
+                    });
+                } else {
+                    material = new THREE.MeshStandardMaterial({
+                        color: new THREE.Color(this.materialProps.color),
+                        roughness: parseFloat(this.materialProps.roughness),
+                        metalness: parseFloat(this.materialProps.metalness),
+                        map: canvasTex,
+                        side: THREE.DoubleSide,
+                        flatShading: true // Sombreado facetado clásico de Blender
+                    });
+                }
+
+                this.meshInstance = new THREE.Mesh(geometry, material);
+                this.meshInstance.castShadow = true;
+                this.meshInstance.receiveShadow = true;
+
+                // Aplicar las propiedades de transformación local
+                this.meshInstance.position.copy(this.position);
+                this.meshInstance.rotation.copy(this.rotation);
+                this.meshInstance.scale.copy(this.scale);
+
+                this.meshInstance.userData = { blenderMeshRef: this };
+
+                scene.add(this.meshInstance);
+
+                // Si es el objeto activo, dibujar el clásico contorno naranja de Blender
+                if (activeObject === this) {
+                    const wireMat = new THREE.MeshBasicMaterial({
+                        color: 0xf29111,
+                        wireframe: true,
+                        transparent: true,
+                        opacity: 0.6
+                    });
+                    this.wireframeHelper = new THREE.Mesh(geometry.clone(), wireMat);
+                    this.wireframeHelper.position.copy(this.position);
+                    this.wireframeHelper.rotation.copy(this.rotation);
+                    this.wireframeHelper.scale.copy(this.scale);
+                    scene.add(this.wireframeHelper);
+                }
+            }
+        }
+
+        // --- SISTEMA PROCEDIMENTAL DE TEXTURAS ---
+        // Genera imágenes de texturas realistas directamente en memoria mediante HTML5 Canvas
+        function generateProceduralTexture(type) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 256;
+            canvas.height = 256;
+            const ctx = canvas.getContext('2d');
+
+            if (type === 'checkers') {
+                // Tablero de ajedrez
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0,0,256,256);
+                ctx.fillStyle = '#1e1e1e';
+                for(let i=0; i<8; i++) {
+                    for(let j=0; j<8; j++) {
+                        if((i + j) % 2 === 0) {
+                            ctx.fillRect(i*32, j*32, 32, 32);
+                        }
+                    }
+                }
+            } else if (type === 'bricks') {
+                // Ladrillo clásico
+                ctx.fillStyle = '#7a2f2f';
+                ctx.fillRect(0,0,256,256);
+                ctx.fillStyle = '#b5b5b5';
+                ctx.lineWidth = 2;
+                for(let y=0; y<256; y+=32) {
+                    // Línea horizontal
+                    ctx.beginPath();
+                    ctx.moveTo(0, y);
+                    ctx.lineTo(256, y);
+                    ctx.stroke();
+                    // Cruces verticales alternados
+                    let offset = (y % 64 === 0) ? 0 : 32;
+                    for(let x=offset; x<256; x+=64) {
+                        ctx.beginPath();
+                        ctx.moveTo(x, y);
+                        ctx.lineTo(x, y + 32);
+                        ctx.stroke();
+                    }
+                }
+            } else if (type === 'clouds') {
+                // Ruido estocástico plano (Nubes)
+                for(let i=0; i<256; i+=4) {
+                    for(let j=0; j<256; j+=4) {
+                        let gray = Math.floor(Math.sin(i*0.05) * Math.cos(j*0.05) * 127 + 128);
+                        ctx.fillStyle = `rgb(${gray}, ${gray}, ${gray})`;
+                        ctx.fillRect(i, j, 4, 4);
+                    }
+                }
+            }
+
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+            return texture;
+        }
+
+        // --- INICIALIZACIÓN DEL ENTORNO 3D (THREEJS) ---
+        function initEngine3D() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x1e1e1e); // Gris oscuro oficial
+
+            camera = new THREE.PerspectiveCamera(45, threeContainer.clientWidth / threeContainer.clientHeight, 0.1, 1000);
+            camera.position.set(5, 5, 8);
+            camera.lookAt(0, 0, 0);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(threeContainer.clientWidth, threeContainer.clientHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            threeContainer.appendChild(renderer.domElement);
+
+            // Rejilla de Blender (Grid)
+            gridHelper = new THREE.GridHelper(20, 20, 0xf29111, 0x444444);
+            gridHelper.position.y = -0.01; // Sutil corrección para evitar parpadeo plano
+            scene.add(gridHelper);
+
+            // Grupo contenedor para los ayudantes de vértices del Modo Edición
+            editHelpersGroup = new THREE.Group();
+            scene.add(editHelpersGroup);
+
+            // Iluminación Profesional de Blender
+            ambientLight = new THREE.AmbientLight(0xffffff, 0.35);
+            scene.add(ambientLight);
+
+            // Luz solar direccional que produce sombras suaves
+            dirLight = new THREE.DirectionalLight(0xfff8ee, 0.7);
+            dirLight.position.set(6, 12, 5);
+            dirLight.castShadow = true;
+            dirLight.shadow.mapSize.width = 1024;
+            dirLight.shadow.mapSize.height = 1024;
+            scene.add(dirLight);
+
+            // Luz puntual de apoyo para efectos de Material Preview
+            pointLight = new THREE.PointLight(0x3a80ff, 0.6, 15);
+            pointLight.position.set(-4, 3, -4);
+            scene.add(pointLight);
+
+            // Instanciar el cubo inicial clásico de Blender
+            const defaultCube = new BlenderMesh('cube');
+            blenderObjects.push(defaultCube);
+            selectObject(defaultCube);
+
+            rebuildOutliner();
+
+            // Loop de Animación
+            animate();
+        }
+
+        // --- ANIMACIÓN LOOP PRINCIPAL ---
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // Actualizar rotaciones u operaciones progresivas si fuese necesario
+            renderer.render(scene, camera);
+        }
+
+        // --- MANEJO DE SELECCIÓN DE OBJETOS ---
+        function selectObject(blenderObj) {
+            // Deseleccionar el anterior
+            if (activeObject && activeObject !== blenderObj) {
+                const prev = activeObject;
+                activeObject = null;
+                prev.rebuild();
+            }
+
+            activeObject = blenderObj;
+            selectedVertices.clear();
+            selectedFaces.clear();
+
+            if (activeObject) {
+                activeObject.rebuild();
+                updateUIFields();
+                if (interactionMode === 'edit') {
+                    buildEditModeHelpers();
+                }
+            } else {
+                clearPropertiesUI();
+                clearEditHelpers();
+            }
+
+            rebuildOutliner();
+        }
+
+        // --- ACTUALIZAR PANEL DE PROPIEDADES EN INTERFAZ DOM ---
+        function updateUIFields() {
+            if (!activeObject) return;
+
+            // Datos de Nombre e Información Geométrica
+            document.getElementById('obj-name-input').value = activeObject.name;
+            document.getElementById('geom-vertices').innerText = activeObject.vertices.length;
+            document.getElementById('geom-faces').innerText = activeObject.faces.length;
+
+            // Transformaciones Físicas
+            document.getElementById('transform-pos-x').value = activeObject.position.x.toFixed(2);
+            document.getElementById('transform-pos-y').value = activeObject.position.y.toFixed(2);
+            document.getElementById('transform-pos-z').value = activeObject.position.z.toFixed(2);
+
+            document.getElementById('transform-rot-x').value = Math.round(activeObject.rotation.x * (180/Math.PI));
+            document.getElementById('transform-rot-y').value = Math.round(activeObject.rotation.y * (180/Math.PI));
+            document.getElementById('transform-rot-z').value = Math.round(activeObject.rotation.z * (180/Math.PI));
+
+            document.getElementById('transform-sca-x').value = activeObject.scale.x.toFixed(2);
+            document.getElementById('transform-sca-y').value = activeObject.scale.y.toFixed(2);
+            document.getElementById('transform-sca-z').value = activeObject.scale.z.toFixed(2);
+
+            // Materiales
+            document.getElementById('mat-color-picker').value = activeObject.materialProps.color;
+            document.getElementById('mat-color-hex').value = activeObject.materialProps.color.toUpperCase();
+            document.getElementById('mat-roughness').value = activeObject.materialProps.roughness;
+            document.getElementById('val-roughness').innerText = activeObject.materialProps.roughness;
+            document.getElementById('mat-metalness').value = activeObject.materialProps.metalness;
+            document.getElementById('val-metalness').innerText = activeObject.materialProps.metalness;
+            document.getElementById('mat-texture').value = activeObject.materialProps.textureType;
+        }
+
+        function clearPropertiesUI() {
+            document.getElementById('obj-name-input').value = '';
+            document.getElementById('geom-vertices').innerText = '-';
+            document.getElementById('geom-faces').innerText = '-';
+            document.getElementById('transform-pos-x').value = '';
+            document.getElementById('transform-pos-y').value = '';
+            document.getElementById('transform-pos-z').value = '';
+        }
+
+        // --- SISTEMA DE GESTIÓN DE ATRIBUTOS DEL MATERIAL ---
+        function updateActiveMaterial(prop, value) {
+            if (!activeObject) return;
+
+            if (prop === 'color') {
+                activeObject.materialProps.color = value;
+                document.getElementById('mat-color-hex').value = value.toUpperCase();
+            } else if (prop === 'roughness') {
+                activeObject.materialProps.roughness = value;
+                document.getElementById('val-roughness').innerText = value;
+            } else if (prop === 'metalness') {
+                activeObject.materialProps.metalness = value;
+                document.getElementById('val-metalness').innerText = value;
+            } else if (prop === 'texture') {
+                activeObject.materialProps.textureType = value;
+            }
+
+            activeObject.rebuild();
+        }
+
+        function updateActiveTransform(type, axis, value) {
+            if (!activeObject) return;
+            const num = parseFloat(value);
+            if (isNaN(num)) return;
+
+            if (type === 'pos') {
+                activeObject.position[axis] = num;
+            } else if (type === 'rot') {
+                activeObject.rotation[axis] = num * (Math.PI / 180);
+            } else if (type === 'sca') {
+                activeObject.scale[axis] = num;
+            }
+
+            activeObject.rebuild();
+            if (interactionMode === 'edit') buildEditModeHelpers();
+        }
+
+        function updateObjectName(val) {
+            if (!activeObject) return;
+            activeObject.name = val;
+            rebuildOutliner();
+        }
+
+        // --- SISTEMA DEL MODO EDICIÓN (CONSTRUCCIÓN DE COMPONENTES INTERACTIVOS) ---
+        function toggleInteractionMode() {
+            if (!activeObject) {
+                notifyUser("Selecciona primero un objeto de la escena.");
+                return;
+            }
+
+            if (interactionMode === 'object') {
+                interactionMode = 'edit';
+                document.getElementById('mode-badge').innerText = "Modo Edición";
+                selectionTypeContainer.classList.remove('hidden');
+                document.getElementById('edit-tools').classList.remove('opacity-40');
+                document.getElementById('tool-extrude').disabled = false;
+                document.getElementById('tool-subdivide').disabled = false;
+                buildEditModeHelpers();
+                notifyUser("Entraste en Modo Edición. Selecciona vértices o caras.");
+            } else {
+                interactionMode = 'object';
+                document.getElementById('mode-badge').innerText = "Modo Objeto";
+                selectionTypeContainer.classList.add('hidden');
+                document.getElementById('edit-tools').classList.add('opacity-40');
+                document.getElementById('tool-extrude').disabled = true;
+                document.getElementById('tool-subdivide').disabled = true;
+                clearEditHelpers();
+                notifyUser("Regresaste al Modo Objeto.");
+            }
+        }
+
+        function setEditSelectMode(mode) {
+            editSelectMode = mode;
+            selectedVertices.clear();
+            selectedFaces.clear();
+            
+            // Cambiar aspecto visual de botones
+            document.getElementById('sel-vertex').className = (mode === 'vertex') ? 
+                "px-2.5 py-1 text-xs rounded bg-blender-light text-white font-semibold flex items-center space-x-1" :
+                "px-2.5 py-1 text-xs rounded text-gray-400 hover:bg-blender-light hover:text-white transition flex items-center space-x-1";
+                
+            document.getElementById('sel-face').className = (mode === 'face') ? 
+                "px-2.5 py-1 text-xs rounded bg-blender-light text-white font-semibold flex items-center space-x-1" :
+                "px-2.5 py-1 text-xs rounded text-gray-400 hover:bg-blender-light hover:text-white transition flex items-center space-x-1";
+
+            buildEditModeHelpers();
+        }
+
+        // Construye pequeños puntos interactivos (Vértices) y puntos de centro de cara (Caras)
+        function buildEditModeHelpers() {
+            clearEditHelpers();
+            if (!activeObject) return;
+
+            const matrixWorld = activeObject.meshInstance.matrixWorld;
+
+            if (editSelectMode === 'vertex') {
+                // Generar un helper para cada vértice
+                activeObject.vertices.forEach((vert, idx) => {
+                    const localPos = vert.clone();
+                    localPos.applyMatrix4(matrixWorld); // Pasar a espacio tridimensional global
+
+                    const isSelected = selectedVertices.has(idx);
+                    
+                    // Pequeña esfera interactiva
+                    const geo = new THREE.SphereGeometry(0.07, 8, 8);
+                    const mat = new THREE.MeshBasicMaterial({
+                        color: isSelected ? 0xfff000 : 0xf29111,
+                        depthTest: false // Evita que se tape por el propio objeto
+                    });
+                    
+                    const helper = new THREE.Mesh(geo, mat);
+                    helper.position.copy(localPos);
+                    helper.renderOrder = 999;
+                    helper.userData = { type: 'vertex', index: idx };
+
+                    editHelpersGroup.add(helper);
+                    vertexHelperMeshes.push(helper);
+                });
+            } else if (editSelectMode === 'face') {
+                // Generar un indicador interactivo en el baricentro de cada cara
+                activeObject.faces.forEach((face, idx) => {
+                    // Calculamos la posición promedio
+                    const avgPos = new THREE.Vector3(0,0,0);
+                    face.forEach(vIdx => {
+                        avgPos.add(activeObject.vertices[vIdx]);
+                    });
+                    avgPos.divideScalar(face.length);
+                    avgPos.applyMatrix4(matrixWorld); // Coordenadas globales
+
+                    const isSelected = selectedFaces.has(idx);
+
+                    // Pequeño cubo que simboliza el centro de la cara
+                    const geo = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+                    const mat = new THREE.MeshBasicMaterial({
+                        color: isSelected ? 0xffea00 : 0x00a8ff,
+                        depthTest: false
+                    });
+
+                    const helper = new THREE.Mesh(geo, mat);
+                    helper.position.copy(avgPos);
+                    helper.renderOrder = 999;
+                    helper.userData = { type: 'face', index: idx };
+
+                    editHelpersGroup.add(helper);
+                    faceHelperMeshes.push(helper);
+                });
+            }
+        }
+
+        function clearEditHelpers() {
+            // Vaciar y limpiar memoria gráfica
+            vertexHelperMeshes.forEach(m => {
+                m.geometry.dispose();
+                m.material.dispose();
+            });
+            faceHelperMeshes.forEach(m => {
+                m.geometry.dispose();
+                m.material.dispose();
+            });
+            vertexHelperMeshes = [];
+            faceHelperMeshes = [];
+            
+            while(editHelpersGroup.children.length > 0) { 
+                const obj = editHelpersGroup.children[0];
+                editHelpersGroup.remove(obj); 
+            }
+        }
+
+        // --- EXTRUSIÓN DE GEOMETRÍA (MODELADO) ---
+        // Duplica las caras seleccionadas para "tirar" de ellas en el espacio
+        function triggerExtrusion() {
+            if (interactionMode !== 'edit' || editSelectMode !== 'face') {
+                notifyUser("La Extrusión requiere estar en Modo Edición de Caras.");
+                return;
+            }
+            if (selectedFaces.size === 0) {
+                notifyUser("Debes seleccionar al menos una cara para poder extruir.");
+                return;
+            }
+
+            const faceIdx = Array.from(selectedFaces)[0]; // Extruir la cara activa seleccionada
+            const face = activeObject.faces[faceIdx];
+
+            // 1. Calcular el vector normal tridimensional de la cara
+            const v0 = activeObject.vertices[face[0]];
+            const v1 = activeObject.vertices[face[1]];
+            const v2 = activeObject.vertices[face[2]];
+            
+            const edge1 = new THREE.Vector3().subVectors(v1, v0);
+            const edge2 = new THREE.Vector3().subVectors(v2, v0);
+            const normal = new THREE.Vector3().crossVectors(edge1, edge2).normalize();
+
+            // 2. Duplicar los vértices existentes de esa cara
+            const oldVerticesIndices = [...face];
+            const newVerticesIndices = [];
+
+            face.forEach(vIdx => {
+                // Creamos un nuevo punto físico idéntico
+                const oldVert = activeObject.vertices[vIdx];
+                const newVert = oldVert.clone().addScaledVector(normal, 0.8); // Desplazar sutilmente hacia afuera
+                activeObject.vertices.push(newVert);
+                newVerticesIndices.push(activeObject.vertices.length - 1);
+            });
+
+            // 3. Crear las caras laterales de conexión (Muros del túnel)
+            const numVerts = face.length;
+            for(let i=0; i<numVerts; i++) {
+                const next = (i + 1) % numVerts;
+                // Cuadrilátero que conecta base anterior con base extruida
+                const sideFace = [
+                    oldVerticesIndices[i],
+                    oldVerticesIndices[next],
+                    newVerticesIndices[next],
+                    newVerticesIndices[i]
+                ];
+                activeObject.faces.push(sideFace);
+            }
+
+            // 4. Reemplazar la cara seleccionada original por la tapa extruida final
+            activeObject.faces[faceIdx] = newVerticesIndices;
+
+            // 5. Actualizar interfaz y regenerar malla
+            activeObject.rebuild();
+            
+            // Transferir la selección de cara a la nueva cara resultante de la tapa
+            selectedFaces.clear();
+            selectedFaces.add(faceIdx);
+
+            buildEditModeHelpers();
+            notifyUser("Extrusión completada. Presiona G para reposicionarla.");
+        }
+
+        // --- ALGORITMO MODIFICADOR: SUBDIVIDIR SUPERFICIE ---
+        // Incrementa la resolución de polígonos dividiendo todas las caras
+        function triggerSubdivision() {
+            if (!activeObject) return;
+
+            const oldVertices = [...activeObject.vertices];
+            const oldFaces = [...activeObject.faces];
+
+            const newVertices = [...oldVertices];
+            const newFaces = [];
+
+            // Tabla Hash para evitar duplicar vértices de corte a la mitad de aristas
+            const midpointCache = {};
+
+            function getMidpoint(v1Idx, v2Idx) {
+                const key = v1Idx < v2Idx ? `${v1Idx}_${v2Idx}` : `${v2Idx}_${v1Idx}`;
+                if (midpointCache[key] !== undefined) {
+                    return midpointCache[key];
+                }
+
+                const v1 = oldVertices[v1Idx];
+                const v2 = oldVertices[v2Idx];
+                const mid = new THREE.Vector3().addVectors(v1, v2).multiplyScalar(0.5);
+                
+                newVertices.push(mid);
+                const newIdx = newVertices.length - 1;
+                midpointCache[key] = newIdx;
+                return newIdx;
+            }
+
+            oldFaces.forEach(face => {
+                if (face.length === 4) {
+                    // Subdividir un cuadrilátero (Quad) en 4 quads más pequeños
+                    const i0 = face[0];
+                    const i1 = face[1];
+                    const i2 = face[2];
+                    const i3 = face[3];
+
+                    // Vértices de puntos medios
+                    const m01 = getMidpoint(i0, i1);
+                    const m12 = getMidpoint(i1, i2);
+                    const m23 = getMidpoint(i2, i3);
+                    const m30 = getMidpoint(i3, i0);
+
+                    // Vértice central del baricentro
+                    const center = new THREE.Vector3(0,0,0)
+                        .add(oldVertices[i0]).add(oldVertices[i1])
+                        .add(oldVertices[i2]).add(oldVertices[i3])
+                        .multiplyScalar(0.25);
+                    newVertices.push(center);
+                    const centerIdx = newVertices.length - 1;
+
+                    // Crear los 4 nuevos cuadriláteros
+                    newFaces.push([i0, m01, centerIdx, m30]);
+                    newFaces.push([m01, i1, m12, centerIdx]);
+                    newFaces.push([centerIdx, m12, i2, m23]);
+                    newFaces.push([m30, centerIdx, m23, i3]);
+                } else {
+                    // Si es un triángulo, lo dejamos tal cual o lo dividimos en 3 quads
+                    newFaces.push(face);
+                }
+            });
+
+            // Promediado y suavizado geométrico para redondear el objeto (Efecto Catmull-Clark suave)
+            // Aplica un sutil filtro de paso bajo a todos los vértices nuevos para un acabado orgánico
+            const smoothedVertices = newVertices.map((v, idx) => {
+                if (idx < oldVertices.length) {
+                    // Suavizar vértices originales promediando con vecinos inmediatos
+                    const neighbors = [];
+                    oldFaces.forEach(face => {
+                        const pos = face.indexOf(idx);
+                        if (pos !== -1) {
+                            const prev = face[(pos - 1 + face.length) % face.length];
+                            const next = face[(pos + 1) % face.length];
+                            neighbors.push(newVertices[prev], newVertices[next]);
+                        }
+                    });
+
+                    if (neighbors.length > 0) {
+                        const sum = new THREE.Vector3(0,0,0);
+                        neighbors.forEach(n => sum.add(n));
+                        sum.divideScalar(neighbors.length);
+                        return new THREE.Vector3().lerpVectors(v, sum, 0.45); // Peso de interpolación suave
+                    }
+                }
+                return v;
+            });
+
+            activeObject.vertices = smoothedVertices;
+            activeObject.faces = newFaces;
+            activeObject.rebuild();
+
+            selectedVertices.clear();
+            selectedFaces.clear();
+
+            if (interactionMode === 'edit') buildEditModeHelpers();
+            updateUIFields();
+            notifyUser("Malla Subdividida y suavizada con éxito.");
+        }
+
+        // --- ACCIONES DE AGREGAR MUESTRAS GEOMÉTRICAS ---
+        function addMesh(type) {
+            const newObj = new BlenderMesh(type);
+            // Generamos un desfase leve para que no aparezcan uno encima de otro
+            newObj.position.set((blenderObjects.length * 0.5) - 1, 0, 0);
+            blenderObjects.push(newObj);
+            selectObject(newObj);
+            document.getElementById('add-menu').classList.add('hidden');
+            notifyUser(`Malla ${type.toUpperCase()} agregada a la escena.`);
+        }
+
+        // --- SISTEMA INTERACTIVO DE ANIMACIÓN (LÍNEA DE TIEMPO) ---
+        function insertKeyframe() {
+            if (!activeObject) {
+                notifyUser("Selecciona un objeto para registrar su Keyframe.");
+                return;
+            }
+
+            const objId = activeObject.id;
+            if (!keyframes[objId]) keyframes[objId] = {};
+
+            // Guardamos las coordenadas de transformación exactas en este frame
+            keyframes[objId][currentFrame] = {
+                position: activeObject.position.clone(),
+                rotation: activeObject.rotation.clone(),
+                scale: activeObject.scale.clone()
+            };
+
+            notifyUser(`Keyframe insertado para ${activeObject.name} en el Frame ${currentFrame}`);
+            updateTimelineVisuals();
+        }
+
+        function setAnimationFrame(frame) {
+            currentFrame = Math.max(1, Math.min(totalFrames, frame));
+            document.getElementById('current-frame-lbl').innerText = currentFrame;
+
+            // Mover el puntero visual del Timeline
+            const totalWidth = 2500; // Ancho virtual del timeline extendido
+            const percent = (currentFrame - 1) / (totalFrames - 1);
+            document.getElementById('timeline-cursor').style.left = `${percent * 100}%`;
+
+            // Evaluar e interpolar transformaciones físicas basadas en fotogramas clave
+            blenderObjects.forEach(obj => {
+                const objKeys = keyframes[obj.id];
+                if (!objKeys) return;
+
+                // Buscar los keyframes más cercanos
+                const frames = Object.keys(objKeys).map(Number).sort((a,b) => a-b);
+                if (frames.length === 0) return;
+
+                if (objKeys[currentFrame]) {
+                    // Coincidencia exacta
+                    obj.position.copy(objKeys[currentFrame].position);
+                    obj.rotation.copy(objKeys[currentFrame].rotation);
+                    obj.scale.copy(objKeys[currentFrame].scale);
+                } else {
+                    // Interpolar entre el frame anterior y posterior
+                    let prevFrame = null;
+                    let nextFrame = null;
+
+                    for(let i=0; i<frames.length; i++) {
+                        if (frames[i] < currentFrame) prevFrame = frames[i];
+                        if (frames[i] > currentFrame && nextFrame === null) nextFrame = frames[i];
+                    }
+
+                    if (prevFrame !== null && nextFrame !== null) {
+                        const alpha = (currentFrame - prevFrame) / (nextFrame - prevFrame);
+                        const k1 = objKeys[prevFrame];
+                        const k2 = objKeys[nextFrame];
+
+                        obj.position.lerpVectors(k1.position, k2.position, alpha);
+                        
+                        // Interpolación esférica de rotaciones (Quaterniones)
+                        const q1 = new THREE.Quaternion().setFromEuler(k1.rotation);
+                        const q2 = new THREE.Quaternion().setFromEuler(k2.rotation);
+                        q1.slerp(q2, alpha);
+                        obj.rotation.setFromQuaternion(q1);
+
+                        obj.scale.lerpVectors(k1.scale, k2.scale, alpha);
+                    } else if (prevFrame !== null) {
+                        // Usar el último frame clave disponible
+                        obj.position.copy(objKeys[prevFrame].position);
+                        obj.rotation.copy(objKeys[prevFrame].rotation);
+                        obj.scale.copy(objKeys[prevFrame].scale);
+                    }
+                }
+
+                obj.rebuild();
+            });
+
+            if (activeObject) updateUIFields();
+        }
+
+        function stepAnimationFrame(dir) {
+            setAnimationFrame(currentFrame + dir);
+        }
+
+        function togglePlayback() {
+            const btn = document.getElementById('play-pause-btn');
+            if (isPlaying) {
+                isPlaying = false;
+                clearInterval(playInterval);
+                btn.innerHTML = `<i data-lucide="play" class="w-3 h-3 inline"></i> <span>PLAY</span>`;
+                lucide.createIcons();
+            } else {
+                isPlaying = true;
+                btn.innerHTML = `<i data-lucide="pause" class="w-3 h-3 inline"></i> <span>PAUSE</span>`;
+                lucide.createIcons();
+                playInterval = setInterval(() => {
+                    let next = currentFrame + 1;
+                    if (next > totalFrames) next = 1;
+                    setAnimationFrame(next);
+                }, 40); // 24 FPS aproximados
+            }
+        }
+
+        // --- FUNCIÓN DE EXPORTACIÓN REAL .OBJ ---
+        function exportToOBJ() {
+            if (!activeObject) return;
+
+            let objText = `# Blender Web Clone Export - ${activeObject.name}\n`;
+            
+            // Escribir Vértices tridimensionales
+            activeObject.vertices.forEach(v => {
+                objText += `v ${v.x.toFixed(4)} ${v.y.toFixed(4)} ${v.z.toFixed(4)}\n`;
+            });
+
+            objText += `\n`;
+
+            // Escribir Caras (sumamos +1 a los índices ya que OBJ empieza en 1)
+            activeObject.faces.forEach(face => {
+                const line = face.map(idx => idx + 1).join(' ');
+                objText += `f ${line}\n`;
+            });
+
+            // Crear y gatillar descarga del archivo local
+            const blob = new Blob([objText], { type: 'text/plain' });
+            const element = document.createElement("a");
+            element.href = URL.createObjectURL(blob);
+            element.download = `${activeObject.name.toLowerCase()}_web_model.obj`;
+            document.body.appendChild(element);
+            element.click();
+            document.body.removeChild(element);
+
+            notifyUser(`Modelo exportado como ${activeObject.name.toLowerCase()}_web_model.obj`);
+        }
+
+        // --- MANEJO DE RAYCASTING (INTERACCIÓN EN PANTALLA 3D) ---
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+
+        function onViewportClick(event) {
+            // Evitar conflictos con clics en botones de la interfaz flotante
+            if (event.target !== renderer.domElement) return;
+
+            // Calcular coordenadas de pantalla normalizadas
+            const rect = renderer.domElement.getBoundingClientRect();
+            mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+
+            if (interactionMode === 'object') {
+                // Raycast contra mallas completas de objetos
+                const targets = blenderObjects.map(obj => obj.meshInstance).filter(m => m !== null);
+                const intersects = raycaster.intersectObjects(targets);
+
+                if (intersects.length > 0) {
+                    const hitObj = intersects[0].object.userData.blenderMeshRef;
+                    selectObject(hitObj);
+                }
+            } else {
+                // Raycast contra puntos de edición del Modo Edición
+                const intersects = raycaster.intersectObjects(editHelpersGroup.children);
+
+                if (intersects.length > 0) {
+                    const hitHelper = intersects[0].object;
+                    const idx = hitHelper.userData.index;
+
+                    if (editSelectMode === 'vertex') {
+                        if (event.shiftKey) {
+                            if (selectedVertices.has(idx)) selectedVertices.delete(idx);
+                            else selectedVertices.add(idx);
+                        } else {
+                            selectedVertices.clear();
+                            selectedVertices.add(idx);
+                        }
+                    } else if (editSelectMode === 'face') {
+                        if (event.shiftKey) {
+                            if (selectedFaces.has(idx)) selectedFaces.delete(idx);
+                            else selectedFaces.add(idx);
+                        } else {
+                            selectedFaces.clear();
+                            selectedFaces.add(idx);
+                        }
+                    }
+
+                    buildEditModeHelpers();
+                    notifyUser(`Elemento geométrico #${idx} seleccionado.`);
+                }
+            }
+        }
+
+        // --- TECLAS DE ACCESO RÁPIDO (SHORTCUTS GENERALES) ---
+        // Maneja todas las transformaciones mediante las clásicas letras G, R, S, E, etc.
+        let activeAxisLock = null; // 'x', 'y' o 'z' mientras se traslada
+
+        function onKeyDown(event) {
+            if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'SELECT') return;
+
+            const key = event.key.toLowerCase();
+
+            // Atajo: Tabulación para cambiar modos
+            if (event.key === 'Tab') {
+                event.preventDefault();
+                toggleInteractionMode();
+            }
+
+            // Atajo: Shift + A para menú de agregar
+            if (event.shiftKey && key === 'a') {
+                event.preventDefault();
+                showAddMenu();
+            }
+
+            // Atajo: Borrar objeto o elemento
+            if (event.key === 'Delete' || key === 'x') {
+                deleteActiveElement();
+            }
+
+            // Atajos de Transformación Directa
+            if (key === 'g') {
+                triggerTransformMode('translate');
+            } else if (key === 'r') {
+                triggerTransformMode('rotate');
+            } else if (key === 's') {
+                triggerTransformMode('scale');
+            } else if (key === 'e') {
+                triggerExtrusion();
+            } else if (key === 'i') {
+                insertKeyframe();
+            }
+
+            // Barra Espaciadora para Play/Pause
+            if (event.code === 'Space') {
+                event.preventDefault();
+                togglePlayback();
+            }
+
+            // Teclas de Ejes para bloqueo de transformación
+            if (transformState) {
+                if (key === 'x') {
+                    lockToAxis('x');
+                } else if (key === 'y') {
+                    lockToAxis('y');
+                } else if (key === 'z') {
+                    lockToAxis('z');
+                }
+            }
+        }
+
+        // --- SISTEMA DE TRANSFORMACIÓN ACTIVO (G, R, S) ---
+        let transformSensitivity = 0.015;
+
+        function triggerTransformMode(mode) {
+            if (!activeObject) return;
+            transformState = mode;
+            transformAxisLock = null;
+            transformMouseStart = { x: mouse.x, y: mouse.y };
+            
+            // Guardar valores iniciales para poder deshacer si cancela
+            transformInitialValues = {
+                pos: activeObject.position.clone(),
+                rot: activeObject.rotation.clone(),
+                sca: activeObject.scale.clone(),
+                vertices: activeObject.vertices.map(v => v.clone())
+            };
+
+            window.addEventListener('mousemove', onTransformDrag);
+            window.addEventListener('mousedown', confirmTransform);
+            
+            notifyUser(`Transformación activa: [${mode.toUpperCase()}]. Presiona X, Y, Z para bloquear eje.`);
+        }
+
+        function onTransformDrag(event) {
+            if (!transformState || !activeObject) return;
+
+            const rect = renderer.domElement.getBoundingClientRect();
+            const currMouseX = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            const currMouseY = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+            const dx = currMouseX - transformMouseStart.x;
+            const dy = currMouseY - transformMouseStart.y;
+
+            // Determinar vector tridimensional de traslación
+            const moveVec = new THREE.Vector3(dx * 5, dy * 5, 0);
+            
+            // Restricciones físicas según eje bloqueado
+            if (transformAxisLock === 'x') {
+                moveVec.set(dx * 7, 0, 0);
+            } else if (transformAxisLock === 'y') {
+                moveVec.set(0, dx * 7, 0);
+            } else if (transformAxisLock === 'z') {
+                moveVec.set(0, 0, -dy * 7);
+            }
+
+            if (interactionMode === 'object') {
+                // Mover objeto entero
+                if (transformState === 'translate') {
+                    activeObject.position.copy(transformInitialValues.pos).add(moveVec);
+                } else if (transformState === 'rotate') {
+                    activeObject.rotation.x = transformInitialValues.rot.x + (dy * Math.PI);
+                    activeObject.rotation.y = transformInitialValues.rot.y + (dx * Math.PI);
+                } else if (transformState === 'scale') {
+                    const factor = 1 + dx * 2;
+                    activeObject.scale.copy(transformInitialValues.sca).multiplyScalar(factor);
+                }
+            } else {
+                // Mover vértices seleccionados en el Modo Edición
+                if (transformState === 'translate') {
+                    selectedVertices.forEach(idx => {
+                        activeObject.vertices[idx].copy(transformInitialValues.vertices[idx]).add(moveVec);
+                    });
+                } else if (transformState === 'scale') {
+                    // Escalar con respecto al centro de los puntos seleccionados
+                    const center = new THREE.Vector3(0,0,0);
+                    selectedVertices.forEach(idx => center.add(transformInitialValues.vertices[idx]));
+                    center.divideScalar(selectedVertices.size);
+
+                    const factor = 1 + dx * 2;
+                    selectedVertices.forEach(idx => {
+                        const originalOffset = new THREE.Vector3().subVectors(transformInitialValues.vertices[idx], center);
+                        activeObject.vertices[idx].copy(center).addScaledVector(originalOffset, factor);
+                    });
+                }
+            }
+
+            activeObject.rebuild();
+            if (interactionMode === 'edit') buildEditModeHelpers();
+            updateUIFields();
+        }
+
+        function confirmTransform() {
+            // Confirmar y limpiar manejadores temporales
+            window.removeEventListener('mousemove', onTransformDrag);
+            window.removeEventListener('mousedown', confirmTransform);
+            transformState = null;
+            notifyUser("Transformación aplicada correctamente.");
+        }
+
+        function lockToAxis(axis) {
+            transformAxisLock = axis;
+            notifyUser(`Eje restringido al eje: [${axis.toUpperCase()}]`);
+        }
+
+        // --- ELIMINAR ELEMENTOS ---
+        function deleteActiveElement() {
+            if (!activeObject) return;
+
+            if (interactionMode === 'object') {
+                scene.remove(activeObject.meshInstance);
+                if (activeObject.wireframeHelper) scene.remove(activeObject.wireframeHelper);
+                blenderObjects = blenderObjects.filter(o => o !== activeObject);
+                activeObject = null;
+                selectObject(blenderObjects[0] || null);
+                notifyUser("Objeto eliminado de la escena.");
+            } else {
+                // En modo edición borramos las caras seleccionadas
+                if (selectedFaces.size > 0) {
+                    const faceIdx = Array.from(selectedFaces)[0];
+                    activeObject.faces.splice(faceIdx, 1);
+                    selectedFaces.clear();
+                    activeObject.rebuild();
+                    buildEditModeHelpers();
+                    notifyUser("Cara eliminada.");
+                }
+            }
+            rebuildOutliner();
+        }
+
+        // --- ELEMENTOS DE INTERFAZ DEL DOM Y MENÚS ---
+        function setShadingMode(mode) {
+            shadingMode = mode;
+            
+            // Actualizar estilo visual de los botones
+            const modes = ['wire', 'solid', 'material', 'render'];
+            modes.forEach(m => {
+                const btn = document.getElementById(`shading-${m}`);
+                if (m === mode) {
+                    btn.className = "p-1 rounded bg-blender-light text-white shadow";
+                } else {
+                    btn.className = "p-1 rounded text-gray-400 hover:bg-blender-light";
+                }
+            });
+
+            // Reconfigurar luces
+            if (mode === 'render') {
+                dirLight.intensity = 1.0;
+                ambientLight.intensity = 0.15;
+            } else {
+                dirLight.intensity = 0.7;
+                ambientLight.intensity = 0.35;
+            }
+
+            blenderObjects.forEach(obj => obj.rebuild());
+            notifyUser(`Sombreado cambiado a: [${mode.toUpperCase()}]`);
+        }
+
+        function setPropertyTab(tab) {
+            const tabs = ['transform', 'material', 'modifier'];
+            tabs.forEach(t => {
+                const el = document.getElementById(`properties-${t}`);
+                const btn = document.getElementById(`tab-${t}`);
+                if (t === tab) {
+                    el.classList.remove('hidden');
+                    btn.className = "flex-1 py-1.5 text-center text-xs font-semibold bg-blender-dark text-blender-orange border-r border-blender";
+                } else {
+                    el.classList.add('hidden');
+                    btn.className = "flex-1 py-1.5 text-center text-xs font-semibold hover:bg-blender-medium hover:text-white border-r border-blender";
+                }
+            });
+        }
+
+        function showAddMenu() {
+            const menu = document.getElementById('add-menu');
+            menu.classList.remove('hidden');
+            // Posicionar cerca del puntero
+            menu.style.left = `80px`;
+            menu.style.top = `60px`;
+        }
+
+        function toggleMenu(menuId) {
+            if (menuId === 'add') {
+                showAddMenu();
+            }
+        }
+
+        function toggleDictionary() {
+            const drawer = document.getElementById('dictionary-drawer');
+            drawer.classList.toggle('hidden');
+        }
+
+        function rebuildOutliner() {
+            const container = document.getElementById('outliner-objects');
+            container.innerHTML = '';
+
+            blenderObjects.forEach(obj => {
+                const isActive = activeObject === obj;
+                const div = document.createElement('div');
+                div.className = `flex items-center justify-between py-1 px-2 rounded cursor-pointer ${isActive ? 'bg-blender-light text-white' : 'hover:bg-blender-medium text-gray-400'}`;
+                div.onclick = () => selectObject(obj);
+                div.innerHTML = `
+                    <div class="flex items-center space-x-1.5">
+                        <i data-lucide="box" class="w-3.5 h-3.5 text-gray-300"></i>
+                        <span>${obj.name}</span>
+                    </div>
+                    <i data-lucide="eye" class="w-3 h-3 text-gray-400"></i>
+                `;
+                container.appendChild(div);
+            });
+            lucide.createIcons();
+        }
+
+        function notifyUser(msg) {
+            statusNotification.innerText = msg;
+        }
+
+        // --- CONSTRUCCIÓN VISUAL DEL TIMELINE DE ANIMACIÓN ---
+        function initTimelineTicks() {
+            const container = document.getElementById('timeline-ticks');
+            container.innerHTML = '';
+            for(let i=1; i<=totalFrames; i+=10) {
+                const tick = document.createElement('div');
+                tick.className = "flex flex-col items-center justify-end h-full relative cursor-pointer";
+                tick.style.width = "40px";
+                tick.onclick = () => setAnimationFrame(i);
+                tick.innerHTML = `
+                    <span class="text-[8px] absolute bottom-4 text-zinc-500">${i}</span>
+                    <div class="w-[1px] h-2 bg-zinc-700"></div>
+                `;
+                container.appendChild(tick);
+            }
+        }
+
+        function updateTimelineVisuals() {
+            // Colorear de amarillo los ticks que tengan Keyframes reales para simular Blender
+            const ticks = document.getElementById('timeline-ticks').children;
+            // (Re-evaluación visual opcional)
+        }
+
+        // --- ROTACIÓN DE CÁMARA MEDIANTE ARRUGUE DE RATÓN ---
+        // Simula la navegación de Blender (Mover cámara orbitando)
+        let isOrbiting = false;
+        let prevMousePos = { x: 0, y: 0 };
+
+        viewportContainer.addEventListener('mousedown', (e) => {
+            // El botón central del ratón (Middle click) ó click derecho hace órbita en Blender
+            if (e.button === 1 || e.button === 2) {
+                e.preventDefault();
+                isOrbiting = true;
+                prevMousePos = { x: e.clientX, y: e.clientY };
+            }
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (!isOrbiting) return;
+            const dx = e.clientX - prevMousePos.x;
+            const dy = e.clientY - prevMousePos.y;
+
+            // Rotar la cámara alrededor del origen central
+            const radius = camera.position.distanceTo(new THREE.Vector3(0,0,0));
+            const theta = Math.atan2(camera.position.x, camera.position.z) - (dx * 0.007);
+            const phi = Math.max(0.1, Math.min(Math.PI/2 - 0.1, Math.acos(camera.position.y / radius) - (dy * 0.007)));
+
+            camera.position.x = radius * Math.sin(phi) * Math.sin(theta);
+            camera.position.y = radius * Math.cos(phi);
+            camera.position.z = radius * Math.sin(phi) * Math.cos(theta);
+            camera.lookAt(0,0,0);
+
+            prevMousePos = { x: e.clientX, y: e.clientY };
+        });
+
+        window.addEventListener('mouseup', () => {
+            isOrbiting = false;
+        });
+
+        // Zoom con la rueda del ratón (Scroll Wheel)
+        viewportContainer.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const radius = camera.position.distanceTo(new THREE.Vector3(0,0,0));
+            const newRadius = Math.max(2, Math.min(40, radius + (e.deltaY * 0.005)));
+            
+            camera.position.normalize().multiplyScalar(newRadius);
+        }, { passive: false });
+
+        // Ajustar el lienzo al redimensionar la ventana
+        window.addEventListener('resize', () => {
+            camera.aspect = threeContainer.clientWidth / threeContainer.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(threeContainer.clientWidth, threeContainer.clientHeight);
+        });
+
+        // --- CARGAR EVENTOS DE ENTRADA AL INICIALIZAR ---
+        window.onload = function() {
+            initEngine3D();
+            initTimelineTicks();
+            lucide.createIcons();
+
+            window.addEventListener('keydown', onKeyDown);
+            renderer.domElement.addEventListener('click', onViewportClick);
+        }
+    </script>
+</body>
+</html>
